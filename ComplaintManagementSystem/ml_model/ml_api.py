@@ -23,7 +23,7 @@ CORS(app)  # Enable CORS for PHP backend
 
 # Configuration
 MODEL_PATH = 'complaint_model.pkl'
-DATA_PATH = '../data.csv'
+DATA_PATH = os.environ.get('DATA_PATH', 'data.csv')  # Supports Docker environment
 
 # Global model variable
 model = None
@@ -98,7 +98,7 @@ def predict():
     Predict priority for a complaint
     """
     try:
-        data = request.get_json()
+        data = request.get_json(force=True, silent=True)
         
         if not data or 'complaint_text' not in data:
             return jsonify({
@@ -194,14 +194,13 @@ def model_stats():
             'error': str(e)
         }), 500
 
+# Load model on module import (works with Gunicorn)
+print("=" * 60)
+print("Smart Complaint Management System - ML API")
+print("=" * 60)
+load_model()
+
 if __name__ == '__main__':
-    print("=" * 60)
-    print("Smart Complaint Management System - ML API")
-    print("=" * 60)
-    
-    # Load or train model on startup
-    load_model()
-    
     print("\nStarting Flask API server...")
     print("API Endpoints:")
     print("  - POST /predict      : Predict complaint priority")
