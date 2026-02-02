@@ -1,0 +1,106 @@
+version: '3.8'
+
+services:
+  # ============================================
+  # MySQL Database Service
+  # ============================================
+  mysql:
+    build:
+      context: ./ComplaintManagementSystem/docker/mysql
+      dockerfile: Dockerfile
+    container_name: complaint-mysql
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: RootPass@123
+      MYSQL_DATABASE: complaint_management_system
+      MYSQL_USER: complaint_user
+      MYSQL_PASSWORD: ComplaintPass@123
+      TZ: UTC
+    restart: unless-stopped
+    networks:
+      - complaint-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pRootPass@123"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ============================================
+  # PHP/Apache Web Application Service
+  # ============================================
+  php-app:
+    build:
+      context: ./ComplaintManagementSystem/docker/php
+      dockerfile: Dockerfile
+    container_name: complaint-php
+    ports:
+      - "8080:80"
+    volumes:
+      - ./ComplaintManagementSystem/backend:/var/www/html/backend
+      - ./ComplaintManagementSystem/frontend:/var/www/html/frontend
+      - complaint-uploads:/var/www/html/uploads
+    environment:
+      DB_HOST: mysql
+      DB_USER: complaint_user
+      DB_PASS: ComplaintPass@123
+      DB_NAME: complaint_management_system
+      ML_API_URL: http://ml-api:5000/predict
+      TZ: UTC
+    depends_on:
+      mysql:
+        condition: service_healthy
+      ml-api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - complaint-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ============================================
+  # Python ML API Service
+  # ============================================
+  ml-api:
+    build:
+      context: ./ComplaintManagementSystem/docker/ml
+      dockerfile: Dockerfile
+    container_name: complaint-ml-api
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./ComplaintManagementSystem/ml_model:/app
+      - ./data.csv:/app/data.csv:ro
+      - ml-model-data:/app/models
+    environment:
+      FLASK_ENV: production
+      PYTHONUNBUFFERED: 1
+      TZ: UTC
+    restart: unless-stopped
+    networks:
+      - complaint-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  mysql-data:
+    driver: local
+  complaint-uploads:
+    driver: local
+  ml-model-data:
+    driver: local
+
+networks:
+  complaint-network:
+    driver: bridge
